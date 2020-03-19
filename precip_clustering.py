@@ -13,6 +13,10 @@ import sys
 from collections import Counter
 
 if __name__ == '__main__':
+    """
+    Program to run through all the parsed data and create a 
+    precipitation best estimate based on clustering
+    """
 
     files = glob.glob('./sgpprecip/sgpprecip*20190508*')
 

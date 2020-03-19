@@ -16,6 +16,9 @@ import sys
 from collections import Counter
 
 if __name__ == '__main__':
+    """
+    Program to help visualize the kmeans clusting
+    """
 
     files = glob.glob('./sgpprecip/sgpprecip*20190520*')
 
