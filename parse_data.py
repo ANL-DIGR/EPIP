@@ -13,6 +13,7 @@ def process_data(cf_ds, d, username, token):
     d = d.strftime('%Y-%m-%d')
     precip = xr.Dataset()
     vmax = []
+    precip_var = []
     # Run through each datastream
     for ds in cf_ds:
         # if data not available try and download
@@ -37,42 +38,64 @@ def process_data(cf_ds, d, username, token):
 
         # Run through each variable
         for v in cf_ds[ds]['variable']:
-            da = obj[v]
+            obj = act.qc.arm.add_dqr_to_qc(obj, variable=v)
+            da = obj[v].where(obj['qc_'+v] == 0)
+
             # Convert units and add to dataarray list
             units = da.attrs['units']
             if units == 'mm':
                 da.attrs['units'] = 'mm/min'
             da.values = act.utils.data_utils.convert_units(da.values, da.attrs['units'], out_units)
             da.attrs['units'] = out_units
-            da = da.resample(time='1min').mean()
+            attrs = da.attrs
+            da = da.resample(time='1min', keep_attrs=True).mean()#nearest(tolerance='1min')
+            #da = da.where(da > 0., drop=True)
+            da.attrs = attrs
+            precip_var.append('_'.join([ds, v]))
             precip['_'.join([ds, v])] = da
 
             # Add temperature data
             variables = ['temp_mean', 'rh_mean', 'wdir_vec_mean', 'wspd_vec_mean', 'atmos_pressure', 'pwd_pw_code_inst']
             if ds == 'sgpaosmetE13.a1' and temp is False:
-                aosmet_var = ['temperature_ambient', 'rh_ambient', 'wind_direction', 'wind_speed', 'pressure_ambient', '']
-                for i, var in enumerate(variables), ds, d, d:
-                    precip[var] = obj[aosmet_var[i]].resample(time='1min').mean()
+                aosmet_var = ['temperature_ambient', 'rh_ambient', 'wind_direction', 'wind_speed', 'pressure_ambient']
+                for i, var in enumerate(aosmet_var):
+                    precip[variables[i]] = obj[var].resample(time='1min').mean()
                 temp = True
             if ds == 'sgpmetE13.b1' and temp is False:
                 for var in variables:
-                    precip[var] = obj[var]
+                    precip[var] = obj[var].resample(time='1min').nearest()
                 temp = True
-            if ds == 'sgpmwr3cC1.b1' and temp is False:
+            if ds == 'sgpmwr3cC1.b1':
                 mwr3c_vars = ['lwp', 'pwv']
                 for var in mwr3c_vars:
-                    precip[var] = obj[var]
+                    precip[var] = obj[var].resample(time='1min').nearest()
 
             da.close()
         obj.close()
 
+
+
     # Only use data when temperature above freezing
-    precip = precip.where(precip['temp_mean'] > 2.)
-    vmax = [np.nanmax(precip[v].values) for v in precip]
+    precip = precip.where(precip['temp_mean'] > 2., drop=True)
+
+    if len(precip['time']) == 0:
+        return
+
+    precip = precip.fillna(0)
+
+    precip_df = precip.to_dataframe()
+    test = precip_df[precip_var].sum(axis=1).to_xarray()
+    precip['total_precip'] = test
+    precip = precip.where(precip['total_precip'] > 0., drop=True)
+    precip = precip.drop('total_precip')
+    if len(precip['time']) == 0:
+        return
+
+    vmax = [np.nanmax(precip[v].values) for v in precip_var]
 
     # Count number of instruments recording precip
     vsum = sum(i > 0 for i in vmax)
-    if vsum > 5:
+    if vsum > 3:
         precip.to_netcdf('./sgpprecip/sgpprecip.' + arm_d + '.nc')
 
 if __name__ == '__main__':
@@ -84,7 +107,7 @@ if __name__ == '__main__':
     token = data['token']
 
     # Specify dictionary of datastreams, variables, and weights
-    cf_ds = {'sgpmetE13.b1': {'variable': ['tbrg_precip_total', 'org_precip_rate_mean',
+    cf_ds = {'sgpmetE13.b1': {'variable': ['tbrg_precip_total_corr', 'org_precip_rate_mean',
                                            'pwd_precip_rate_mean_1min']},
              'sgpvdisC1.b1': {'variable': ['rain_rate']},
              'sgpvdisE13.b1': {'variable': ['rain_rate']},
@@ -100,8 +123,9 @@ if __name__ == '__main__':
 
     # Specify date for analysis
     startdate = '2017-01-01'
+    #startdate = '2019-05-08'
     enddate = '2019-12-31'
-    #enddate = '2017-01-10'
+    #enddate = '2019-05-08'
     sdate = ''.join(startdate.split('-'))
     edate = ''.join(enddate.split('-'))
     days = act.utils.datetime_utils.dates_between(sdate, edate)
@@ -115,7 +139,9 @@ if __name__ == '__main__':
     # and that was the reason for upping the threshold
     task = []
     for d in days:
-        task.append(dask.delayed(process_data)(cf_ds, d, username, token))
+        #print(d)
+        result = process_data(cf_ds, d, username, token)
+        #task.append(dask.delayed(process_data)(cf_ds, d, username, token))
 
-    result = dask.compute(*task)
+    #result = dask.compute(*task)
     print(result)
