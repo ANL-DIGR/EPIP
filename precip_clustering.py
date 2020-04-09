@@ -44,15 +44,18 @@ if __name__ == '__main__':
         # If row does not have recorded precip, continue
         z_idx = data != 0
         z_index = np.where(z_idx)
-        if z_index[0][0] == -1 or len(z_index[0]) <= 1:
+
+        # Set number of clusters here
+        clusters = 2
+        if z_index[0][0] == -1 or len(z_index[0]) <= clusters - 1:
             prec.append(0.)
             continue
 
         # Only run clustering on non-zero data
         data_n0 = data[z_index]
 
-        # Running scipy kmeans, using 2 clusters
-        y, _ = kmeans(data_n0, 3)
+        # Running scipy kmeans, using # clusters
+        y, _ = kmeans(data_n0, clusters)
 
         # Get indice of cluster with most instruments
         cluster_indices, _ = vq(data_n0, y)
