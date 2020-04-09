@@ -2,8 +2,6 @@ import act
 import glob
 import xarray as xr
 import dask
-from sklearn.cluster import KMeans
-from sklearn.neighbors import LocalOutlierFactor
 import matplotlib.pyplot as plt
 from scipy import stats
 from scipy.cluster.vq import vq, kmeans, whiten, kmeans2
@@ -18,8 +16,9 @@ if __name__ == '__main__':
     precipitation best estimate based on clustering
     """
 
-    files = glob.glob('./sgpprecip/sgpprecip*20190508*')
+    files = glob.glob('./sgpprecip/sgpprecip*201*')
 
+    # Open files and accumulate precipitation
     obj = act.io.armfiles.read_netcdf(files)
     obj = obj.fillna(0)
     for v in obj:
@@ -27,33 +26,40 @@ if __name__ == '__main__':
             continue
         obj = act.utils.data_utils.accumulate_precip(obj, v, time_delta=60.)
 
+    # Convert to pandas dataframe
     df = obj.to_dataframe()
 
+    # Drop any non-rain rate variables
     for d in df:
-        #if 'accumulated' not in d:
-        #    df = df.drop(d,1)
         if obj[d].attrs['units'] != 'mm/hr':
             df = df.drop(d,1)
 
 
-    #y = KMeans(n_clusters=2, random_state=0).fit_predict(df.iloc[0])
+    # For each time, cluster rain rates and take mean of
+    # cluster with most instruments
     prec = []
     for i in range(len(df.index)):
         data = np.asarray(df.iloc[i])
+
+        # If row does not have recorded precip, continue
         z_idx = data != 0
         z_index = np.where(z_idx)
         if z_index[0][0] == -1 or len(z_index[0]) <= 1:
             prec.append(0.)
             continue
 
+        # Only run clustering on non-zero data
         data_n0 = data[z_index]
 
-        y, _ = kmeans(data_n0, 2)
+        # Running scipy kmeans, using 2 clusters
+        y, _ = kmeans(data_n0, 3)
 
+        # Get indice of cluster with most instruments
         cluster_indices, _ = vq(data_n0, y)
         counts = Counter(cluster_indices)
         clust = counts.most_common(1)[0][0]
 
+        # Take mean of cluster
         idx = cluster_indices == clust
         index = np.where(idx)[0]
         if sum(data_n0[index]) == 0 and len(np.where(~idx)[0]) > 1:
