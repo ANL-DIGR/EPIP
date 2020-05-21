@@ -5,6 +5,8 @@ import xarray as xr
 import numpy as np
 import dask
 import pandas as pd
+import sys
+import pydsd
 
 def process_data(cf_ds, d, username, token):
     '''
@@ -39,8 +41,30 @@ def process_data(cf_ds, d, username, token):
         except:
             continue
 
+        if 'sgpld' in ds:
+            rr = []
+            time = []
+            for f in files:
+                dsd = pydsd.aux_readers.ARM_APU_reader.read_parsivel_arm_netcdf(f)
+                pydsd.utility.filter.filter_spectrum_with_parsivel_matrix(dsd)
+                dsd.calculate_dsd_from_spectrum()
+                dsd.calculate_RR()
+                rr += dsd.fields['rain_rate']['data'].tolist()
+                time += dsd.time['data'].tolist()
+            ind = np.argsort(time)
+            time = np.asarray(time)[ind]
+            rr = np.asarray(rr)[ind]
+
+            u, uniq_index = np.unique(time, return_index=True)
+            time = time[uniq_index]
+            rr = rr[uniq_index]
+
+            rr[rr < 0] = 0
+
         # Run through each variable
         for v in cf_ds[ds]['variable']:
+            if 'sgpld' in ds:
+                obj[v].values = rr
             # These lines are used to apply ARM qc or not
             #obj = act.qc.arm.add_dqr_to_qc(obj, variable=v)
             #da = obj[v].where(obj['qc_'+v] == 0)
@@ -149,9 +173,9 @@ if __name__ == '__main__':
 
     # Specify date for analysis
     startdate = '2017-01-01'
-    #startdate = '2019-05-20'
+    #startdate = '2019-06-28'
     enddate = '2019-12-31'
-    #enddate = '2019-05-20'
+    #enddate = '2019-06-28'
     sdate = ''.join(startdate.split('-'))
     edate = ''.join(enddate.split('-'))
     days = act.utils.datetime_utils.dates_between(sdate, edate)
