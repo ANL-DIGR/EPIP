@@ -3,17 +3,19 @@ import glob
 import xarray as xr
 import dask
 import matplotlib.pyplot as plt
+import matplotlib.colors as colors
 from scipy import stats
 from scipy.cluster.vq import vq, kmeans, whiten, kmeans2
 import numpy as np
 from statistics import mode, stdev
 import sys
 from collections import Counter
+import pandas as pd
 
 if __name__ == '__main__':
     """
-    Program to run through all the parsed data and create a 
-    precipitation best estimate based on clustering
+    Program to test out different clustering numbers to determine how the instruments
+    compare across rain rates
     """
 
     files = glob.glob('./sgpprecip/sgpprecip*201*')
@@ -34,6 +36,11 @@ if __name__ == '__main__':
         if obj[d].attrs['units'] != 'mm/hr':
             df = df.drop(d,1)
 
+    columns = df.columns.tolist()
+    columns.append(' ')
+    bins = np.linspace(0,105, 106)
+    grid = np.zeros([len(columns), len(bins)])
+
     # For each time, cluster rain rates and take mean of
     # cluster with most instruments
     prec = []
@@ -45,7 +52,7 @@ if __name__ == '__main__':
         z_index = np.where(z_idx)
 
         # Set number of clusters here
-        clusters = 2
+        clusters = 3
         if z_index[0][0] == -1 or len(z_index[0]) <= clusters - 1:
             prec.append(0.)
             continue
@@ -64,10 +71,18 @@ if __name__ == '__main__':
         # Take mean of cluster
         idx = cluster_indices == clust
         index = np.where(idx)[0]
+
         if sum(data_n0[index]) == 0 and len(np.where(~idx)[0]) > 1:
             index = np.where(~idx)[0]
         prec.append(np.nanmean(data_n0[index])/60.)
 
+        rr_ind = (np.abs(bins - np.nanmean(data_n0[index]))).argmin()
+        
+        if np.nanmean(data_n0[index]) > 0:
+            grid[index, rr_ind] += 1
+
+
+    # Add BE to object
     atts = {'units': 'm', 'long_name': 'Best Estimate'}
     da = xr.DataArray(prec, dims=['time'], coords=[obj['time'].values], attrs=atts)
     obj['precip_be'] = da
@@ -78,12 +93,39 @@ if __name__ == '__main__':
     ds = df.to_xarray()
     ds = ds.fillna(0)
 
-    fig, ax = plt.subplots()
+    grid = grid / np.max(grid, axis=0)
+
+    # Write data out to netcdf.  Note, weights is technically not correct
+    grid_obj = xr.Dataset({'weights': (['instruments','rain_rate'], grid),
+                           'rain_rate': ('rain_rate', bins),
+                           'instruments': ('instruments', columns)})
+    grid_obj.to_netcdf('./weights/cluster_3_max_norm.nc')
+    grid_obj.close()
+
+    # Create plot with accumulations on top and heatmap on bottom
+    fig, ax = plt.subplots(nrows=2, figsize=(16,10))
     for d in obj:
         if 'accumulated' not in d:
             continue
         lab = d + ': '+ str(round(obj[d].values[-1],2))
-        ax.plot(obj['time'], obj[d], label=lab)
-    ax.set_xlim([df.index[0], df.index[-1]])
-    ax.legend()
+        ax[0].plot(obj['time'], obj[d], label=lab)
+    ax[0].set_xlim([df.index[0], df.index[-1]])
+    ax[0].legend(loc=2)
+
+    #im = ax[1].pcolormesh(bins, columns, grid, norm=colors.LogNorm(vmin=0.1, vmax=40000), cmap='jet')
+    im = ax[1].pcolormesh(bins, columns, grid, vmin=0, cmap='jet')
+    for label in ax[1].yaxis.get_ticklabels():
+        label.set_verticalalignment('bottom')
+    fig.colorbar(im, ax=ax[1], orientation='horizontal', shrink=0.5, pad=0.05, aspect=30)
+    fig.tight_layout(h_pad=0.05, w_pad=0.05)
+    plt.show()
+    obj.close()
+
+    fig, ax = plt.subplots(nrows=len(columns)-1, figsize=(16,10), sharex=True, gridspec_kw = {'wspace':0, 'hspace':0}, sharey=True)
+    for i,d in enumerate(columns):
+        if i == len(columns) - 1:
+           continue
+        ax[i].plot(bins, grid[i,:], label=d)
+        ax[i].legend(loc=1)
+    fig.tight_layout()
     plt.show()
