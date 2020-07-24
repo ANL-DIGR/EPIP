@@ -30,7 +30,35 @@ if __name__ == '__main__':
 
     # Convert to pandas dataframe
     df = obj.to_dataframe()
-
+ 
+    #JK new data frames for 80/20 weights
+    tb_wb_avg = df[['sgpmetE13.b1_tbrg_precip_total_corr_accumulated', 
+                    'sgpwbpluvio2C1.a1_intensity_rtnrt_accumulated']].mean(axis=1)
+    
+    no_catch_avg = df[['sgpmetE13.b1_org_precip_rate_mean_accumulated', 
+                       'sgpmetE13.b1_pwd_precip_rate_mean_1min_accumulated', 
+                       'sgpvdisC1.b1_rain_rate_accumulated', 
+                       'sgpvdisE13.b1_rain_rate_accumulated',
+                       'sgpdisdrometerC1.b1_rain_rate_accumulated',
+                       'sgpdisdrometerE13.b1_rain_rate_accumulated',
+                       'sgpstamppcpE13.b1_precip_accumulated', 
+                       'sgpwbpluvio2C1.a1_intensity_rtnrt_accumulated',
+                       'sgpldE13.b1_precip_rate_accumulated', 
+                       'sgpldC1.b1_precip_rate_accumulated', 
+                       'sgpaosmetE13.a1_rain_intensity_accumulated',
+                       'sgpmwr3cC1.b1_rain_intensity_accumulated']].mean(axis=1)
+    
+    weight_80_20 = (tb_wb_avg * 0.8) + (no_catch_avg * 0.2)
+    
+    tb_wb_avg_total = round(tb_wb_avg[-1], 2)
+    no_catch_avg_total = round(no_catch_avg[-1], 2)
+    weight_80_20_total = round(weight_80_20[-1], 2)
+    
+    print('Total tb_wb_avg: ', tb_wb_avg_total)
+    print('Total no_catch_avg: ', no_catch_avg_total)
+    print('Total weight_80_20: ', weight_80_20_total)
+    #JK end 
+    
     # Drop any non-rain rate variables
     for d in df:
         if obj[d].attrs['units'] != 'mm/hr':
@@ -40,7 +68,7 @@ if __name__ == '__main__':
     columns.append(' ')
     bins = np.linspace(0,105, 106)
     grid = np.zeros([len(columns), len(bins)])
-
+      
     # For each time, cluster rain rates and take mean of
     # cluster with most instruments
     prec = []
@@ -129,3 +157,11 @@ if __name__ == '__main__':
         ax[i].legend(loc=1)
     fig.tight_layout()
     plt.show()
+    
+#JK Plot the catchment vs. non-catchment averages and 80/20 BE
+ax=tb_wb_avg.plot(x = 'time', y = '...', kind = 'line', label = 'TB and WB Avg: {0}'.format(tb_wb_avg_total))
+no_catch_avg.plot(ax=ax, label = 'Non-Catchment Avg: {0}'.format(no_catch_avg_total))
+weight_80_20.plot(ax=ax, label = '80/20 Weight BE: {0}'.format(weight_80_20_total))
+ax.legend()
+plt.show()
+   
