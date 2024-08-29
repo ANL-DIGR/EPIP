@@ -1,7 +1,11 @@
 # EPIP
 Evaluation of Precipitation Instrument Performance
 
-THis project uses basic machine learning methods to determine a precipitation best estimate.
+These are scripts, data, and images resultant from a study on clustering techniques 
+for the creation of a precipitation best estimate, using data from the Atmospheric Radiation Measurement User Facility (ARM).
+
+
+This project uses basic machine learning methods to determine a precipitation best estimate.
 Work is also being done to determine the performance of differents instruments across different rain rates.
 
 parse_data.py - downloads data from multiple ARM precipitation instruments at SGP, corrects the data using 

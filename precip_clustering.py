@@ -16,7 +16,7 @@ if __name__ == '__main__':
     precipitation best estimate based on clustering
     """
 
-    files = glob.glob('./sgpprecip/sgpprecip*201*')
+    files = glob.glob('./sgpprecip/sgpprecip*201905*')
 
     # Open files and accumulate precipitation
     obj = act.io.armfiles.read_netcdf(files)

@@ -65,10 +65,18 @@ def process_data(cf_ds, d, username, token):
         for v in cf_ds[ds]['variable']:
             if 'sgpld' in ds:
                 obj[v].values = rr
+            #if 'sgpdisdrometerE13' in ds:
+            #    obj[v].values = obj[v].values * 0.
             # These lines are used to apply ARM qc or not
-            #obj = act.qc.arm.add_dqr_to_qc(obj, variable=v)
-            #da = obj[v].where(obj['qc_'+v] == 0)
-            da = obj[v]
+            if 'qc_'+v in obj:
+                obj['qc_'+v].values = obj['qc_'+v].values * 0. 
+            obj = act.qc.arm.add_dqr_to_qc(obj, variable=v, assessment='incorrect')
+            if 'qc_'+v in obj:
+                da = obj[v].where(obj['qc_'+v] == 0)
+            else:
+                da = obj[v]
+            
+            #da = obj[v]
 
             # Convert units and add to dataarray list
             units = da.attrs['units']
@@ -122,12 +130,19 @@ def process_data(cf_ds, d, username, token):
     avg = precip_df[precip_var].mean(axis=1)
     std = precip_df[precip_var].std(axis=1)
     upper = np.nanmean(precip_df[precip_var].sum()/60.) + np.nanstd(precip_df[precip_var].sum()/60.)
+    if upper > 200.:
+        #upper = 100.
+        upper = np.nanmedian(precip_df[precip_var].sum()/60.) + 2. * np.nanstd(precip_df[precip_var].quantile(0.999, axis=1))/60.
+    if upper > 100.:
+        #upper = 100.
+        upper = np.nanmedian(precip_df[precip_var].sum()/60.) + 3. * np.nanstd(precip_df[precip_var].quantile(0.999, axis=1))/60.
     for v in precip_var:
         if v == 'time':
             continue
         if precip_df[v].sum()/60. > upper:
             precip_df.iloc[np.where(precip_df[v] > precip_df[precip_var].quantile(0.999, axis=1))[0], [precip_df.columns.get_loc(v)]] = 0
         precip[v].values = precip_df[v].values
+        #print(v, precip_df[v].sum()/60., upper)
 
     # Create a total precipitation variable to drop times when
     # no instruments are recording precipitation   
@@ -159,8 +174,8 @@ if __name__ == '__main__':
     # Specify dictionary of datastreams, variables, and weights
     cf_ds = {'sgpmetE13.b1': {'variable': ['tbrg_precip_total_corr', 'org_precip_rate_mean',
                                            'pwd_precip_rate_mean_1min']},
-             'sgpvdisC1.b1': {'variable': ['rain_rate']},
-             'sgpvdisE13.b1': {'variable': ['rain_rate']},
+             'sgpvdisfilteredC1.b1': {'variable': ['rain_rate']},
+             'sgpvdisfilteredE13.b1': {'variable': ['rain_rate']},
              'sgpdisdrometerC1.b1': {'variable': ['rain_rate']},
              'sgpdisdrometerE13.b1': {'variable': ['rain_rate']},
              'sgpstamppcpE13.b1': {'variable': ['precip']},
@@ -173,9 +188,9 @@ if __name__ == '__main__':
 
     # Specify date for analysis
     startdate = '2017-01-01'
-    #startdate = '2019-06-28'
+    #startdate = '2017-05-19'
     enddate = '2019-12-31'
-    #enddate = '2019-06-28'
+    #enddate = '2017-05-19'
     sdate = ''.join(startdate.split('-'))
     edate = ''.join(enddate.split('-'))
     days = act.utils.datetime_utils.dates_between(sdate, edate)
@@ -189,9 +204,9 @@ if __name__ == '__main__':
     # and that was the reason for upping the threshold
     task = []
     for d in days:
-        #print(d)
-        #result = process_data(cf_ds, d, username, token)
-        task.append(dask.delayed(process_data)(cf_ds, d, username, token))
+        print(d)
+        result = process_data(cf_ds, d, username, token)
+        #task.append(dask.delayed(process_data)(cf_ds, d, username, token))
 
-    result = dask.compute(*task)
+    #result = dask.compute(*task)
     print(result)
